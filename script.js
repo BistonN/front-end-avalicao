@@ -1,4 +1,5 @@
 /* --- DADOS DAS PROVAS --- */
+const API_URL = 'http://10.91.249.10:3069';
 const TEMPO_PROVA_MIN = 40;
 let provaAtual = [];
 let indiceQuestao = 0;
@@ -82,7 +83,7 @@ function initLogin() {
         button.disabled = true;
         button.textContent = 'Carregando...';
 
-        fetch(`http://localhost:3069/form/${codigo}`)
+        fetch(`${API_URL}/form/${codigo}`)
             .then(response => response.json())
             .then(data => {
                 if (data.results && Array.isArray(data.results)) {
@@ -505,7 +506,7 @@ function finalizar() {
                 resposta_aluno: respostaAluno
             };
             
-            const promise = fetch(`http://localhost:3069/form/question/${codigoProva}`, {
+            const promise = fetch(`${API_URL}/form/question/${codigoProva}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -555,7 +556,7 @@ function buscarRespostasCorretas(nomeAluno, codigoProva) {
         nome: nomeAluno
     };
     
-    return fetch(`http://localhost:3069/form/questions/${codigoProva}`, {
+    return fetch(`${API_URL}/form/questions/${codigoProva}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
