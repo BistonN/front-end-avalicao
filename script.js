@@ -26,7 +26,6 @@ document.addEventListener('DOMContentLoaded', () => {
 function initLogin() {
     localStorage.removeItem('prova_ativa');
     
-    // Configurar navegação entre inputs de código
     const codeInputs = document.querySelectorAll('.code-input');
     codeInputs.forEach((input, index) => {
         input.addEventListener('input', (e) => {
@@ -142,6 +141,166 @@ function initProva() {
     setupAtalhos();
 }
 
+let indiceRevisao = 0;
+
+window.abrirRevisao = function() {
+    indiceRevisao = 0;
+    
+    // Gerar botões de navegação
+    const navGrid = document.getElementById('revisao-nav-grid');
+    navGrid.innerHTML = '';
+    
+    provaAtual.forEach((q, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'q-nav-btn';
+        btn.textContent = i + 1;
+        btn.style.width = '40px';
+        btn.style.height = '40px';
+        
+        // Verificar se acertou
+        const respostasCorretasJSON = localStorage.getItem('respostas_corretas');
+        let acertou = false;
+        if(respostasCorretasJSON) {
+            try {
+                const dados = JSON.parse(respostasCorretasJSON);
+                const item = dados.find(d => d.id_questao === q.id);
+                if(item) {
+                    acertou = item.resposta_aluno === item.resposta_certa;
+                }
+            } catch(e) {}
+        }
+        
+        if(acertou) {
+            btn.classList.add('answered');
+        }
+        
+        btn.onclick = () => { indiceRevisao = i; renderizarRevisao(); };
+        navGrid.appendChild(btn);
+    });
+    
+    renderizarRevisao();
+    document.getElementById('modal-revisao').style.display = 'flex';
+};
+
+window.fecharRevisao = function() {
+    document.getElementById('modal-revisao').style.display = 'none';
+};
+
+window.revisaoNext = function() {
+    if(indiceRevisao < provaAtual.length - 1) {
+        indiceRevisao++;
+        renderizarRevisao();
+    }
+};
+
+window.revisaoPrev = function() {
+    if(indiceRevisao > 0) {
+        indiceRevisao--;
+        renderizarRevisao();
+    }
+};
+
+function renderizarRevisao() {
+    const q = provaAtual[indiceRevisao];
+    const idQuestao = q.id;
+    
+    // Buscar dados da resposta
+    const respostasCorretasJSON = localStorage.getItem('respostas_corretas');
+    let respostaAluno = respostas[indiceRevisao];
+    let respostaCerta = q.correta;
+    
+    if(respostasCorretasJSON) {
+        try {
+            const dados = JSON.parse(respostasCorretasJSON);
+            const item = dados.find(d => d.id_questao === idQuestao);
+            if(item) {
+                respostaAluno = item.resposta_aluno;
+                respostaCerta = item.resposta_certa;
+            }
+        } catch(e) {}
+    }
+    
+    const acertou = respostaAluno === respostaCerta;
+    const opcoes = q.opcoes ? q.opcoes : [q.resposta_a, q.resposta_b, q.resposta_c, q.resposta_d, q.resposta_e].filter(o => o);
+    
+    let html = `
+        <div style="background: ${acertou ? '#dcfce7' : '#fee2e2'}; border-left: 4px solid ${acertou ? 'var(--success)' : 'var(--danger)'}; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span class="material-icons-round" style="color: ${acertou ? 'var(--success)' : 'var(--danger)'}; font-size: 1.5rem;">
+                    ${acertou ? 'check_circle' : 'cancel'}
+                </span>
+                <span style="font-weight: 600; color: ${acertou ? '#166534' : '#991b1b'};">
+                    ${acertou ? 'Resposta Correta' : 'Resposta Incorreta'}
+                </span>
+            </div>
+        </div>
+        
+        <h3 style="margin-bottom: 15px; font-size: 1.1rem;">Questão ${indiceRevisao + 1}</h3>
+        <p style="margin-bottom: 20px; line-height: 1.6; color: var(--text-main);">${escaparHTML(q.pergunta || q.titulo)}</p>
+        
+        <div style="margin-bottom: 20px;">
+            <span style="font-size: 0.9rem; color: var(--text-light); font-weight: 600; display: block; margin-bottom: 10px;">OPÇÕES</span>
+    `;
+    
+    opcoes.forEach((texto, i) => {
+        const letra = String.fromCharCode(65 + i);
+        const isRespostaAluno = letra === respostaAluno;
+        const isRespostaCerta = letra === respostaCerta;
+        
+        let bgColor = 'var(--bg-body)';
+        let borderColor = 'var(--border)';
+        let textColor = 'var(--text-main)';
+        
+        if(isRespostaCerta) {
+            bgColor = '#dcfce7';
+            borderColor = 'var(--success)';
+            textColor = '#166534';
+        } else if(isRespostaAluno && !acertou) {
+            bgColor = '#fee2e2';
+            borderColor = 'var(--danger)';
+            textColor = '#991b1b';
+        }
+        
+        let label = `<strong>${letra})</strong> ${escaparHTML(texto)}`;
+        
+        if(isRespostaCerta) {
+            label += ` <span style="margin-left: 10px; font-weight: 600; color: var(--success);">✓ CORRETA</span>`;
+        }
+        if(isRespostaAluno && !acertou) {
+            label += ` <span style="margin-left: 10px; font-weight: 600; color: var(--danger);">✗ SUA RESPOSTA</span>`;
+        }
+        
+        html += `
+            <div style="padding: 12px; border: 2px solid ${borderColor}; border-radius: 8px; margin-bottom: 8px; background: ${bgColor}; cursor: not-allowed;">
+                <div style="color: ${textColor}; display: flex; align-items: center; gap: 10px;">
+                    ${label}
+                </div>
+            </div>
+        `;
+    });
+    
+    html += `
+        </div>
+        
+        <div style="background: var(--bg-body); padding: 15px; border-radius: 8px; border-left: 3px solid var(--primary);">
+            <span style="font-weight: 600; color: var(--primary); display: block; margin-bottom: 8px;">Explicação:</span>
+            <p style="color: var(--text-main); line-height: 1.6; margin: 0;">${escaparHTML(q.explicacao || 'Sem explicação disponível')}</p>
+        </div>
+    `;
+    
+    document.getElementById('revisao-questao-container').innerHTML = html;
+    document.getElementById('revisao-info').textContent = `Questão ${indiceRevisao + 1} de ${provaAtual.length}`;
+    
+    // Atualizar navegação
+    document.getElementById('revisao-nav-grid').querySelectorAll('.q-nav-btn').forEach((btn, i) => {
+        if(i === indiceRevisao) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+}
+
 function escaparHTML(str) {
     return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -149,9 +308,7 @@ function escaparHTML(str) {
 function adaptarURLGoogleDrive(url) {
     if(!url || typeof url !== 'string') return url;
     
-    // Verifica se é URL do Google Drive
     if(url.includes('drive.google.com')) {
-        // Extrai o ID do arquivo com várias variações possíveis
         let match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
         
         if(!match) {
@@ -160,7 +317,6 @@ function adaptarURLGoogleDrive(url) {
         
         if(match && match[1]) {
             const id = match[1];
-            // Retornar URL em formato que funciona melhor
             return `https://lh3.googleusercontent.com/d/${id}=w1000`;
         }
     }
@@ -170,7 +326,6 @@ function adaptarURLGoogleDrive(url) {
 function renderizarQuestao() {
     const q = provaAtual[indiceQuestao];
     
-    // Adaptar para API (resposta_a, resposta_b, etc.) ou dados locais (opcoes)
     const opcoes = q.opcoes ? q.opcoes : [q.resposta_a, q.resposta_b, q.resposta_c, q.resposta_d, q.resposta_e].filter(o => o);
     const titulo = q.pergunta || q.titulo;
     const imagem = q.imagem || q.url_anexo;
@@ -188,7 +343,6 @@ function renderizarQuestao() {
         console.log('URL Original:', imagem);
         console.log('URL Adaptada:', imagemAdaptada);
         
-        // Mostrar por padrão e esconder apenas se houver erro
         imgArea.style.display = 'block';
         
         imgElement.onerror = function() {
@@ -330,17 +484,146 @@ window.confirmarEFinalizar = () => { fecharModalAviso(); finalizar(); };
 
 function finalizar() {
     clearInterval(timerInterval);
-    localStorage.removeItem('prova_ativa');
     
+    const nomeAluno = localStorage.getItem('aluno_nome');
+    const emailAluno = localStorage.getItem('aluno_email');
+    const codigoProva = localStorage.getItem('prova_codigo');
+    
+    // Criar array de promessas para enviar todas as respostas
+    const promessas = [];
+    let token = localStorage.getItem('prova_token');
+    
+    provaAtual.forEach((q, indice) => {
+        const respostaAluno = respostas[indice];
+        
+        // Apenas enviar se respondida
+        if(respostaAluno) {
+            const corpo = {
+                id: q.id,
+                nome: nomeAluno,
+                email: emailAluno,
+                resposta_aluno: respostaAluno
+            };
+            
+            const promise = fetch(`http://localhost:3069/form/question/${codigoProva}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(corpo)
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log(`Questão ${q.id} enviada:`, data);
+                // Salvar token da primeira resposta
+                if(data.data && data.data.token && !token) {
+                    token = data.data.token;
+                    localStorage.setItem('prova_token', token);
+                }
+                return data;
+            })
+            .catch(error => {
+                console.error(`Erro ao enviar questão ${q.id}:`, error);
+                return null;
+            });
+            
+            promessas.push(promise);
+        }
+    });
+    
+    // Aguardar todas as respostas serem enviadas
+    Promise.all(promessas)
+        .then(resultados => {
+            console.log('Todas as respostas processadas');
+            
+            // Agora buscar as respostas corretas
+            return buscarRespostasCorretas(nomeAluno, codigoProva);
+        })
+        .then(() => {
+            localStorage.removeItem('prova_ativa');
+            exibirResultado();
+        })
+        .catch(error => {
+            console.error('Erro geral no envio:', error);
+            localStorage.removeItem('prova_ativa');
+            exibirResultado();
+        });
+}
+
+function buscarRespostasCorretas(nomeAluno, codigoProva) {
+    const corpo = {
+        nome: nomeAluno
+    };
+    
+    return fetch(`http://localhost:3069/form/questions/${codigoProva}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(corpo)
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Respostas corretas obtidas:', data);
+        
+        // Salvar respostas corretas no localStorage
+        if(data.results && Array.isArray(data.results)) {
+            localStorage.setItem('respostas_corretas', JSON.stringify(data.results));
+            // Salvar token se não foi salvo antes
+            if(data.results[0] && data.results[0].token) {
+                localStorage.setItem('prova_token', data.results[0].token);
+            }
+        }
+        
+        return data;
+    })
+    .catch(error => {
+        console.error('Erro ao buscar respostas corretas:', error);
+        throw error;
+    });
+}
+
+function exibirResultado() {
     let acertos = 0;
     let feedback = '';
     
+    // Tentar usar dados da API se disponível
+    const respostasCorretasJSON = localStorage.getItem('respostas_corretas');
+    let respostasCorretas = {};
+    
+    if(respostasCorretasJSON) {
+        try {
+            const dados = JSON.parse(respostasCorretasJSON);
+            dados.forEach(item => {
+                respostasCorretas[item.id_questao] = {
+                    resposta_certa: item.resposta_certa,
+                    resposta_aluno: item.resposta_aluno
+                };
+            });
+        } catch(e) {
+            console.error('Erro ao parsear respostas corretas:', e);
+        }
+    }
+    
     provaAtual.forEach((q, i) => {
-        const userResp = respostas[i];
-        const ok = userResp === q.correta;
+        const idQuestao = q.id;
+        let userResp, correta, ok;
+        
+        if(respostasCorretas[idQuestao]) {
+            // Dados da API
+            userResp = respostasCorretas[idQuestao].resposta_aluno;
+            correta = respostasCorretas[idQuestao].resposta_certa;
+            ok = userResp === correta;
+        } else {
+            // Dados locais (fallback)
+            userResp = respostas[i];
+            correta = q.correta;
+            ok = userResp === correta;
+        }
+        
         if(ok) acertos++;
         feedback += `<div class="fb-item ${ok ? 'correct' : 'wrong'}">
-            <strong>Q${i+1})</strong> ${ok ? 'Correto!' : `Errou (Sua: ${userResp||'-'} | Certa: ${q.correta})`}
+            <strong>Q${i+1})</strong> ${ok ? 'Correto!' : `Errou (Sua: ${userResp||'-'} | Certa: ${correta})`}
             <div style="font-size:0.85rem; margin-top:4px; color:#555">${q.explicacao || ''}</div>
         </div>`;
     });

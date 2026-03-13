@@ -133,6 +133,52 @@
                     <canvas id="scoreChart"></canvas>
                 </div>
                 
+                <h3 id="msg-resultado" style="text-align: center; margin: 15px 0; font-size: 1.5rem;">Resultado</h3>
+                <p style="text-align: center; color: var(--text-light); margin-bottom: 20px;">
+                    Score: <span id="final-score" style="font-weight: bold; font-size: 1.2rem;">0 / 0</span>
+                </p>
+                
+                <button class="btn btn-primary" style="width: 100%; margin-bottom: 15px;" onclick="abrirRevisao()">
+                    <span class="material-icons-round" style="margin-right: 8px;">fact_check</span> Revisar Respostas
+                </button>
+                
+                <button id="btn-download-pdf" class="btn btn-outline" style="width:100%; margin-bottom:15px; display:none;" onclick="gerarCertificado()">
+                    <span class="material-icons-round" style="margin-right:5px">download</span> Baixar Certificado Oficial
+                </button>
+
+                <div id="feedback-area" class="feedback-box"></div>
+            </div>
+            <button class="btn btn-outline" style="width:100%; margin-top:15px;" onclick="sair()">Sair do Sistema</button>
+        </div>
+    </div>
+
+    <div id="modal-revisao" class="modal-overlay" style="display: none;">
+        <div class="modal-content fade-in" style="max-width: 900px; max-height: 90vh;">
+            <div class="modal-header">
+                <h2>Revisão de Respostas</h2>
+                <button class="icon-btn" onclick="fecharRevisao()"><span class="material-icons-round">close</span></button>
+            </div>
+            
+            <div style="display: flex; gap: 20px; height: calc(100% - 80px); overflow-y: auto;">
+                <!-- Sidebar com navegação -->
+                <div style="width: 150px; border-right: 1px solid var(--border); padding-right: 15px; overflow-y: auto;">
+                    <span style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-light); font-weight: 700; display: block; margin-bottom: 10px;">Questões</span>
+                    <div id="revisao-nav-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px;"></div>
+                </div>
+                
+                <!-- Conteúdo da questão -->
+                <div style="flex: 1; overflow-y: auto; padding-right: 10px;">
+                    <div id="revisao-questao-container"></div>
+                </div>
+            </div>
+            
+            <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--border); display: flex; justify-content: space-between;">
+                <button class="btn btn-outline" onclick="revisaoPrev()">← Anterior</button>
+                <span id="revisao-info" style="color: var(--text-light);">Questão 1 de 0</span>
+                <button class="btn btn-outline" onclick="revisaoNext()">Próxima →</button>
+            </div>
+        </div>
+    </div>
                 <h3 id="msg-resultado" style="text-align:center; margin-top:15px;">Calculando...</h3>
                 <p style="text-align:center;">Nota Final: <b id="final-score" style="font-size:1.5rem; color:var(--primary)">0</b></p>
 
