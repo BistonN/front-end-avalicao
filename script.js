@@ -1,6 +1,6 @@
 /* --- DADOS DAS PROVAS --- */
 const API_URL = 'http://' + window.location.hostname + ':3069';;
-const TEMPO_PROVA_MIN = 40;
+const TEMPO_PROVA_MIN = 180;
 let provaAtual = [];
 let indiceQuestao = 0;
 let respostas = {};
