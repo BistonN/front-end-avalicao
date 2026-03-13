@@ -33,45 +33,28 @@
             </div>
 
             <div class="input-group">
-                <label>Prova Disponível</label>
-                <div class="exam-selection-grid">
-                    
-                    <div class="exam-card selected" onclick="selecionarProva(this, 'WEB-2025')">
-                        <span class="material-icons-round exam-icon">code</span>
-                        <div class="exam-info">
-                            <strong>Front-End</strong>
-                            <small>HTML, CSS, JS</small>
-                        </div>
-                        <span class="material-icons-round check-icon">check_circle</span>
-                    </div>
-
-                    <div class="exam-card" onclick="selecionarProva(this, 'GERAL-2025')">
-                        <span class="material-icons-round exam-icon">public</span>
-                        <div class="exam-info">
-                            <strong>Gerais</strong>
-                            <small>Geo, Hist, Ciências</small>
-                        </div>
-                        <span class="material-icons-round check-icon">check_circle</span>
-                    </div>
-
-                    <div class="exam-card" onclick="selecionarProva(this, 'LOGICA-2025')">
-                        <span class="material-icons-round exam-icon">psychology</span>
-                        <div class="exam-info">
-                            <strong>Lógica</strong>
-                            <small>Algoritmos</small>
-                        </div>
-                        <span class="material-icons-round check-icon">check_circle</span>
-                    </div>
-
+                <label for="student-email">Email</label>
+                <div class="input-wrapper">
+                    <span class="material-icons-round input-icon">email</span>
+                    <input type="email" id="student-email" placeholder="Digite seu email" required>
                 </div>
-                <input type="hidden" id="selected-exam-code" value="WEB-2025">
             </div>
 
-            <div class="login-actions">
-                <button type="submit" class="btn btn-primary btn-full">
-                    Iniciar Avaliação <span class="material-icons-round">arrow_forward</span>
-                </button>
+            <div class="input-group">
+                <label>Código da Prova</label>
+                <div class="code-input-wrapper">
+                    <input type="text" class="code-input" id="code-1" maxlength="1" placeholder="-" required>
+                    <input type="text" class="code-input" id="code-2" maxlength="1" placeholder="-" required>
+                    <input type="text" class="code-input" id="code-3" maxlength="1" placeholder="-" required>
+                    <input type="text" class="code-input" id="code-4" maxlength="1" placeholder="-" required>
+                    <input type="text" class="code-input" id="code-5" maxlength="1" placeholder="-" required>
+                    <input type="text" class="code-input" id="code-6" maxlength="1" placeholder="-" required>
+                </div>
             </div>
+
+            <button type="submit" class="btn btn-primary btn-full" id="submit-btn">
+                Iniciar Avaliação <span class="material-icons-round">arrow_forward</span>
+            </button>
         </form>
     </div>
 

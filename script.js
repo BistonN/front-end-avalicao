@@ -1,26 +1,5 @@
 /* --- DADOS DAS PROVAS --- */
-const bancosDeProvas = {
-    "WEB-2025": [
-        { id: 1, disciplina: "HTML5", pergunta: "Qual elemento HTML é o contêiner correto para metadados de uma página?", opcoes: ["<body>", "<head>", "<meta>", "<header>"], correta: "B", explicacao: "O <head> contém metadados, título e scripts." },
-        { id: 2, disciplina: "CSS3", pergunta: "No CSS, como selecionar todos os elementos <p> dentro de uma <div>?", opcoes: ["div + p", "div > p", "div p", "div ~ p"], correta: "C", explicacao: "'div p' seleciona todos os descendentes p dentro de div." },
-        { id: 3, disciplina: "JavaScript", pergunta: "Qual comando exibe uma mensagem no console?", opcoes: ["console.print()", "console.log()", "print()", "echo()"], correta: "B", explicacao: "console.log() é o método padrão para depuração." },
-        { id: 4, disciplina: "CSS3", pergunta: "Qual propriedade altera a cor do texto?", opcoes: ["font-color", "text-color", "color", "fg-color"], correta: "C", explicacao: "'color' define a cor do texto." },
-        { id: 5, disciplina: "HTML5", pergunta: "Tag para lista não ordenada?", opcoes: ["<ol>", "<ul>", "<li>", "<list>"], correta: "B", explicacao: "<ul> significa Unordered List." }
-    ],
-    "GERAL-2025": [
-        { id: 1, disciplina: "Geografia", pergunta: "O ponto vermelho indica qual capital?", imagem: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/Map_of_Brazil_with_flag.svg/250px-Map_of_Brazil_with_flag.svg.png", opcoes: ["Rio de Janeiro", "Salvador", "Brasília", "Manaus"], correta: "C", explicacao: "Brasília é a capital federal." },
-        { id: 2, disciplina: "História", pergunta: "Ano do homem na Lua?", opcoes: ["1959", "1969", "1979", "1989"], correta: "B", explicacao: "Apollo 11 foi em 1969." },
-        { id: 3, disciplina: "Ciência", pergunta: "Planeta mais próximo do Sol?", opcoes: ["Vênus", "Marte", "Mercúrio", "Terra"], correta: "C", explicacao: "Mercúrio é o primeiro planeta." },
-        { id: 4, disciplina: "Química", pergunta: "Fórmula da água?", opcoes: ["H2O", "CO2", "O2", "NaCl"], correta: "A", explicacao: "Dois hidrogênios e um oxigênio." },
-        { id: 5, disciplina: "História", pergunta: "Primeiro presidente do Brasil?", opcoes: ["Vargas", "Deodoro", "Dom Pedro II", "JK"], correta: "B", explicacao: "Deodoro da Fonseca, 1889." }
-    ],
-    "LOGICA-2025": [
-        { id: 1, disciplina: "Algoritmos", pergunta: "A=10, B=20. C=A+B*2. Valor de C?", opcoes: ["60", "50", "40", "30"], correta: "B", explicacao: "20*2=40, 10+40=50." },
-        { id: 2, disciplina: "Lógica", pergunta: "Operador que exige ambas verdadeiras?", opcoes: ["OR", "NOT", "AND", "XOR"], correta: "C", explicacao: "AND (E) exige tudo verdadeiro." }
-    ]
-};
-
-const TEMPO_PROVA_MIN = 20;
+const TEMPO_PROVA_MIN = 40;
 let provaAtual = [];
 let indiceQuestao = 0;
 let respostas = {};
@@ -47,26 +26,84 @@ document.addEventListener('DOMContentLoaded', () => {
 function initLogin() {
     localStorage.removeItem('prova_ativa');
     
-    // Função global para cards
-    window.selecionarProva = function(element, codigo) {
-        document.querySelectorAll('.exam-card').forEach(card => card.classList.remove('selected'));
-        element.classList.add('selected');
-        document.getElementById('selected-exam-code').value = codigo;
-    };
+    // Configurar navegação entre inputs de código
+    const codeInputs = document.querySelectorAll('.code-input');
+    codeInputs.forEach((input, index) => {
+        input.addEventListener('input', (e) => {
+            if(e.target.value) {
+                e.target.value = e.target.value.toUpperCase();
+                if(index < codeInputs.length - 1) {
+                    codeInputs[index + 1].focus();
+                }
+            }
+        });
+        
+        input.addEventListener('keydown', (e) => {
+            if(e.key === 'Backspace' && !e.target.value && index > 0) {
+                codeInputs[index - 1].focus();
+            }
+        });
+
+        input.addEventListener('paste', (e) => {
+            e.preventDefault();
+            const texto = (e.clipboardData || window.clipboardData).getData('text').toUpperCase();
+            
+            // Distribuir caracteres nos inputs
+            for (let i = 0; i < Math.min(texto.length, codeInputs.length); i++) {
+                codeInputs[i].value = texto[i];
+            }
+            
+            // Focar no último input preenchido
+            const ultimoIndex = Math.min(texto.length - 1, codeInputs.length - 1);
+            codeInputs[ultimoIndex].focus();
+        });
+    });
 
     document.getElementById('login-form').addEventListener('submit', (e) => {
         e.preventDefault();
-        const codigo = document.getElementById('selected-exam-code').value;
+        
+        const codigo = Array.from(codeInputs)
+            .map(input => input.value.trim().toUpperCase())
+            .join('');
         const nome = document.getElementById('student-name').value.trim();
+        const email = document.getElementById('student-email').value.trim();
 
-        if (!bancosDeProvas[codigo]) { alert("Erro: Prova inválida."); return; }
+        // Validar se todos os inputs estão preenchidos
+        const todosPreenchidos = Array.from(codeInputs).every(input => input.value.trim());
+        if (!todosPreenchidos) { alert("Preencha todos os campos do código."); return; }
+        if (codigo.length !== 6) { alert("Código deve ter exatamente 6 caracteres."); return; }
 
+        // Salvar no localStorage
         localStorage.setItem('aluno_nome', nome);
+        localStorage.setItem('aluno_email', email);
         localStorage.setItem('prova_codigo', codigo);
-        localStorage.setItem('prova_ativa', 'true');
-        localStorage.removeItem('respostas');
-        localStorage.removeItem('tempo_fim');
-        window.location.href = 'prova.html';
+
+        // Requisição para buscar questões
+        const button = document.getElementById('submit-btn');
+        button.disabled = true;
+        button.textContent = 'Carregando...';
+
+        fetch(`http://localhost:3069/form/${codigo}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.results && Array.isArray(data.results)) {
+                    localStorage.setItem('prova_questoes', JSON.stringify(data.results));
+                    localStorage.setItem('prova_ativa', 'true');
+                    localStorage.removeItem('respostas');
+                    localStorage.removeItem('tempo_fim');
+                    window.location.href = 'prova.html';
+                } else {
+                    alert("Erro: Formato de resposta inválido.");
+                    button.disabled = false;
+                    button.innerHTML = 'Iniciar Avaliação <span class="material-icons-round">arrow_forward</span>';
+                }
+            })
+            .catch(error => {
+                console.error('Erro na requisição:', error);
+                alert("Erro ao buscar a prova. Verifique o código informado.");
+                button.disabled = false;
+                button.innerHTML = 'Iniciar Avaliação <span class="material-icons-round">arrow_forward</span>';
+            });
     });
 }
 
@@ -75,7 +112,18 @@ function initProva() {
     if(localStorage.getItem('prova_ativa') !== 'true') { window.location.href = 'index.html'; return; }
 
     const codigo = localStorage.getItem('prova_codigo');
-    provaAtual = bancosDeProvas[codigo];
+    
+    // Tentar buscar questões da API primeiro, senão usar dados locais
+    const questoesAPI = localStorage.getItem('prova_questoes');
+    if (questoesAPI) {
+        provaAtual = JSON.parse(questoesAPI);
+    } else if (bancosDeProvas[codigo]) {
+        provaAtual = bancosDeProvas[codigo];
+    } else {
+        window.location.href = 'index.html';
+        return;
+    }
+
     respostas = JSON.parse(localStorage.getItem('respostas')) || {};
     
     document.getElementById('user-name').textContent = localStorage.getItem('aluno_nome');
@@ -98,22 +146,63 @@ function escaparHTML(str) {
     return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+function adaptarURLGoogleDrive(url) {
+    if(!url || typeof url !== 'string') return url;
+    
+    // Verifica se é URL do Google Drive
+    if(url.includes('drive.google.com')) {
+        // Extrai o ID do arquivo com várias variações possíveis
+        let match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+        
+        if(!match) {
+            match = url.match(/id=([a-zA-Z0-9-_]+)/);
+        }
+        
+        if(match && match[1]) {
+            const id = match[1];
+            // Retornar URL em formato que funciona melhor
+            return `https://lh3.googleusercontent.com/d/${id}=w1000`;
+        }
+    }
+    return url;
+}
+
 function renderizarQuestao() {
     const q = provaAtual[indiceQuestao];
-    document.getElementById('q-badge').textContent = q.disciplina;
+    
+    // Adaptar para API (resposta_a, resposta_b, etc.) ou dados locais (opcoes)
+    const opcoes = q.opcoes ? q.opcoes : [q.resposta_a, q.resposta_b, q.resposta_c, q.resposta_d, q.resposta_e].filter(o => o);
+    const titulo = q.pergunta || q.titulo;
+    const imagem = q.imagem || q.url_anexo;
+    const disciplina = q.disciplina || 'Questão';
+    
+    document.getElementById('q-badge').textContent = disciplina;
     document.getElementById('q-title').textContent = `Questão ${indiceQuestao + 1}`;
-    document.getElementById('q-text').textContent = q.pergunta;
+    document.getElementById('q-text').textContent = titulo;
 
     const imgArea = document.getElementById('q-image-area');
-    if(q.imagem) {
-        document.getElementById('q-image').src = q.imagem;
+    const imgElement = document.getElementById('q-image');
+    if(imagem && imagem !== null && imagem !== '') {
+        let imagemAdaptada = adaptarURLGoogleDrive(imagem);
+        
+        console.log('URL Original:', imagem);
+        console.log('URL Adaptada:', imagemAdaptada);
+        
+        // Mostrar por padrão e esconder apenas se houver erro
         imgArea.style.display = 'block';
+        
+        imgElement.onerror = function() {
+            imgArea.style.display = 'none';
+            console.error('Erro ao carregar imagem. URL:', imagemAdaptada);
+        };
+        
+        imgElement.src = imagemAdaptada;
     } else { imgArea.style.display = 'none'; }
     
     const container = document.getElementById('options-box');
     container.innerHTML = '';
 
-    q.opcoes.forEach((texto, i) => {
+    opcoes.forEach((texto, i) => {
         const letra = String.fromCharCode(65 + i);
         const checked = respostas[indiceQuestao] === letra ? 'checked' : '';
         
