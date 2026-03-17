@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Resultados - Professor</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .container { max-width:1000px; margin:30px auto; padding:20px }
+    table { width:100%; border-collapse:collapse; margin-top:12px }
+    th,td { padding:8px 10px; border:1px solid var(--border); text-align:left }
+    .summary { margin-top:18px }
+  </style>
+</head>
+<body class="login-body">
+  <div class="login-container container">
+    <div style="display:flex;gap:8px;align-items:center;">
+      <input id="tokenInput" placeholder="Token da prova (ex: ABC123)" style="flex:1; padding:10px; border-radius:8px; border:1px solid var(--border)" />
+      <button id="loadBtn" class="btn btn-primary">Carregar resultados</button>
+      <button id="downloadCsv" class="btn btn-ghost">Baixar CSV</button>
+    </div>
+
+    <div id="info" style="margin-top:12px;color:var(--text-light)"></div>
+
+    <table id="resultsTable" style="display:none">
+      <thead>
+        <tr><th>Aluno</th><th>Email</th><th>Questão</th><th>Resposta Aluno</th><th>Resposta Certa</th><th>Correta</th><th>Data</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <div class="summary" id="summary" style="display:none">
+      <h3>Resumo por aluno</h3>
+      <table>
+        <thead><tr><th>Aluno</th><th>Email</th><th>Acertos</th><th>Total</th><th>Percentual</th></tr></thead>
+        <tbody id="summaryBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'http://localhost:3001';
+    const loadBtn = document.getElementById('loadBtn');
+    const tokenInput = document.getElementById('tokenInput');
+    const info = document.getElementById('info');
+    const resultsTable = document.getElementById('resultsTable');
+    const resultsBody = resultsTable.querySelector('tbody');
+    const summaryEl = document.getElementById('summary');
+    const summaryBody = document.getElementById('summaryBody');
+    const downloadCsv = document.getElementById('downloadCsv');
+
+    loadBtn.addEventListener('click', async () => {
+      const token = (tokenInput.value || '').trim();
+      if (!token) return alert('Informe o token da prova');
+      info.textContent = 'Carregando...';
+      resultsBody.innerHTML = '';
+      summaryBody.innerHTML = '';
+      resultsTable.style.display = 'none';
+      summaryEl.style.display = 'none';
+
+      try {
+        const res = await fetch(`${API_URL}/form/results/${encodeURIComponent(token)}`);
+        if (!res.ok) {
+          const txt = await res.text().catch(()=>null);
+          info.textContent = 'Erro ao carregar: ' + (txt || res.status);
+          return;
+        }
+        const data = await res.json();
+        const rows = data.results || [];
+        const summary = data.summary || [];
+
+        if (rows.length === 0) {
+          info.textContent = 'Nenhuma resposta encontrada para esse token.';
+          return;
+        }
+
+        info.textContent = `Encontradas ${rows.length} linhas. Mostrando resultados.`;
+        resultsTable.style.display = '';
+        rows.forEach(r => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${r.nome||''}</td><td>${r.email||''}</td><td>${r.id_questao}</td><td>${r.resposta_aluno}</td><td>${r.resposta_certa}</td><td>${r.correct==1? 'SIM' : 'NÃO'}</td><td>${new Date(r.created).toLocaleString()}</td>`;
+          resultsBody.appendChild(tr);
+        });
+
+        summaryEl.style.display = '';
+        summary.forEach(s => {
+          const tr = document.createElement('tr');
+          const pct = s.total? Math.round((s.correct / s.total) * 100) + '%' : '0%';
+          tr.innerHTML = `<td>${s.nome||''}</td><td>${s.email||''}</td><td>${s.correct}</td><td>${s.total}</td><td>${pct}</td>`;
+          summaryBody.appendChild(tr);
+        });
+
+        // prepare CSV
+        downloadCsv.onclick = () => {
+          let csv = 'Aluno,Email,Questao,Resposta Aluno,Resposta Certa,Correta,Data\n';
+          rows.forEach(r => {
+            csv += `"${(r.nome||'').replace(/"/g,'""')}","${(r.email||'').replace(/"/g,'""')}",${r.id_questao},${r.resposta_aluno},${r.resposta_certa},${r.correct},"${r.created}"\n`;
+          });
+          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = `resultados_${token}.csv`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+        };
+
+      } catch (err) {
+        console.error(err);
+        info.textContent = 'Erro ao carregar resultados: ' + err.message;
+      }
+    });
+  </script>
+</body>
+</html>
