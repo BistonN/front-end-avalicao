@@ -39,7 +39,7 @@
   </div>
 
   <script>
-    const API_URL = 'http://localhost:3001';
+    const API_URL = localStorage.getItem('api_url') || 'http://localhost:3000';
     const loadBtn = document.getElementById('loadBtn');
     const tokenInput = document.getElementById('tokenInput');
     const info = document.getElementById('info');
