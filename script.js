@@ -782,7 +782,7 @@ function initAdminCreate() {
     const btnSaveLocal = document.getElementById('btn-save-local');
     const btnDownload = document.getElementById('btn-download-json');
     const msg = document.getElementById('admin-msg');
-    const API_ADMIN = (typeof API_URL !== 'undefined' ? API_URL.replace(/\/$/, '') : 'http://localhost:3001') + '/questoes';
+    const API_ADMIN = (typeof API_URL !== 'undefined' ? API_URL.replace(/\/$/, '') : 'http://localhost:3069') + '/questoes';
 
     // Inicializar EasyMDE se disponível
     try {
