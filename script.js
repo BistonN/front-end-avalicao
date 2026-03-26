@@ -1,5 +1,5 @@
 /* --- DADOS DAS PROVAS --- */
-const API_URL = localStorage.getItem('api_url') || 'http://localhost:3000';
+const API_URL = localStorage.getItem('api_url') || 'http://localhost:3069';
 let PROVA_TEMPO_MIN = 180;
 let provaAtual = [];
 let indiceQuestao = 0;
