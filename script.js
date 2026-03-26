@@ -1,11 +1,14 @@
 /* --- DADOS DAS PROVAS --- */
-const API_URL = 'http://' + window.location.hostname + ':3069';;
-const TEMPO_PROVA_MIN = 180;
+const API_URL = localStorage.getItem('api_url') || 'http://localhost:3000';
+let PROVA_TEMPO_MIN = 180;
 let provaAtual = [];
 let indiceQuestao = 0;
 let respostas = {};
 let revisao = new Set();
 let timerInterval;
+// EasyMDE instances (admin page)
+let easyMDEPergunta = null;
+let easyMDEExplicacao = null;
 
 // --- INICIALIZAÇÃO ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -21,11 +24,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (document.getElementById('login-form')) initLogin();
     if (document.getElementById('real-content')) initProva();
+    if (document.getElementById('admin-create-form')) initAdminCreate();
 });
 
 // --- LOGIN ---
 function initLogin() {
-    localStorage.removeItem('prova_ativa');
+    // If there's an active prova stored, resume it instead of resetting
+    try {
+        const active = localStorage.getItem('prova_ativa');
+        const savedCodigo = localStorage.getItem('prova_codigo');
+        if (active === 'true' && savedCodigo) {
+            window.location.href = 'prova.html';
+            return;
+        }
+    } catch (e) {}
     
     const codeInputs = document.querySelectorAll('.code-input');
     codeInputs.forEach((input, index) => {
@@ -78,32 +90,53 @@ function initLogin() {
         localStorage.setItem('aluno_email', email);
         localStorage.setItem('prova_codigo', codigo);
 
+        // Se já existirem questões salvas para esse código e o nome/email coincidem, retomar sem refazer fetch
+        try {
+            const savedQuestoes = localStorage.getItem('prova_questoes');
+            const savedNome = localStorage.getItem('aluno_nome');
+            const savedEmail = localStorage.getItem('aluno_email');
+            const savedCodigo = localStorage.getItem('prova_codigo');
+            if (savedQuestoes && savedCodigo === codigo && savedNome === nome && savedEmail === email) {
+                localStorage.setItem('prova_ativa', 'true');
+                // keep existing respostas in localStorage (no clear)
+                window.location.href = 'prova.html';
+                return;
+            }
+        } catch (e) { /* ignore */ }
+
         // Requisição para buscar questões
         const button = document.getElementById('submit-btn');
         button.disabled = true;
         button.textContent = 'Carregando...';
 
-        fetch(`${API_URL}/form/${codigo}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.results && Array.isArray(data.results)) {
-                    localStorage.setItem('prova_questoes', JSON.stringify(data.results));
-                    localStorage.setItem('prova_ativa', 'true');
-                    localStorage.removeItem('respostas');
-                    localStorage.removeItem('tempo_fim');
-                    window.location.href = 'prova.html';
-                } else {
-                    alert("Erro: Formato de resposta inválido.");
+            fetch(`${API_URL}/form/${codigo}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.results && Array.isArray(data.results)) {
+                        localStorage.setItem('prova_questoes', JSON.stringify(data.results));
+                        // salvar tempo da prova se fornecido pelo backend
+                        if (data.tempo_minutos) {
+                            localStorage.setItem('tempo_prova_minutos', data.tempo_minutos);
+                        } else {
+                            localStorage.removeItem('tempo_prova_minutos');
+                        }
+                        localStorage.setItem('prova_ativa', 'true');
+                        // reset respostas/tempo apenas quando carregando nova prova
+                        localStorage.removeItem('respostas');
+                        localStorage.removeItem('tempo_fim');
+                        window.location.href = 'prova.html';
+                    } else {
+                        alert("Erro: Formato de resposta inválido.");
+                        button.disabled = false;
+                        button.innerHTML = 'Iniciar Avaliação <span class="material-icons-round">arrow_forward</span>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Erro na requisição:', error);
+                    alert("Erro ao buscar a prova. Verifique o código informado.");
                     button.disabled = false;
                     button.innerHTML = 'Iniciar Avaliação <span class="material-icons-round">arrow_forward</span>';
-                }
-            })
-            .catch(error => {
-                console.error('Erro na requisição:', error);
-                alert("Erro ao buscar a prova. Verifique o código informado.");
-                button.disabled = false;
-                button.innerHTML = 'Iniciar Avaliação <span class="material-icons-round">arrow_forward</span>';
-            });
+                });
     });
 }
 
@@ -124,7 +157,25 @@ function initProva() {
         return;
     }
 
-    respostas = JSON.parse(localStorage.getItem('respostas')) || {};
+    // Load saved respostas and migrate index-based keys to id-based keys if necessary
+    try {
+        let stored = JSON.parse(localStorage.getItem('respostas')) || {};
+        const keys = Object.keys(stored);
+        const allNumeric = keys.length > 0 && keys.every(k => /^\d+$/.test(k));
+        if (allNumeric && Array.isArray(provaAtual) && provaAtual.length) {
+            const migrated = {};
+            keys.forEach(k => {
+                const idx = Number(k);
+                const q = provaAtual[idx];
+                if (q && q.id) migrated[q.id] = stored[k];
+            });
+            stored = migrated;
+            try { localStorage.setItem('respostas', JSON.stringify(stored)); } catch(e) {}
+        }
+        respostas = stored;
+    } catch (e) {
+        respostas = {};
+    }
     
     document.getElementById('user-name').textContent = localStorage.getItem('aluno_nome');
     
@@ -207,7 +258,8 @@ function renderizarRevisao() {
     
     // Buscar dados da resposta
     const respostasCorretasJSON = localStorage.getItem('respostas_corretas');
-    let respostaAluno = respostas[indiceRevisao];
+    const revisaoQ = provaAtual[indiceRevisao];
+        let respostaAluno = revisaoQ && respostas[q.id] ? respostas[q.id] : respostas[indiceRevisao];
     let respostaCerta = q.correta;
     
     if(respostasCorretasJSON) {
@@ -223,7 +275,7 @@ function renderizarRevisao() {
     
     const acertou = respostaAluno === respostaCerta;
     const opcoes = q.opcoes ? q.opcoes : [q.resposta_a, q.resposta_b, q.resposta_c, q.resposta_d, q.resposta_e].filter(o => o);
-    
+
     let html = `
         <div style="background: ${acertou ? '#dcfce7' : '#fee2e2'}; border-left: 4px solid ${acertou ? 'var(--success)' : 'var(--danger)'}; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
             <div style="display: flex; align-items: center; gap: 10px;">
@@ -237,7 +289,7 @@ function renderizarRevisao() {
         </div>
         
         <h3 style="margin-bottom: 15px; font-size: 1.1rem;">Questão ${indiceRevisao + 1}</h3>
-        <p style="margin-bottom: 20px; line-height: 1.6; color: var(--text-main);">${escaparHTML(q.pergunta || q.titulo)}</p>
+        <div style="margin-bottom: 20px; line-height: 1.6; color: var(--text-main);">${formatTextWithCode(q.pergunta || q.titulo)}</div>
         
         <div style="margin-bottom: 20px;">
             <span style="font-size: 0.9rem; color: var(--text-light); font-weight: 600; display: block; margin-bottom: 10px;">OPÇÕES</span>
@@ -262,7 +314,7 @@ function renderizarRevisao() {
             textColor = '#991b1b';
         }
         
-        let label = `<strong>${letra})</strong> ${escaparHTML(texto)}`;
+        let label = `<strong>${letra})</strong> ${formatTextWithCode(texto)}`;
         
         if(isRespostaCerta) {
             label += ` <span style="margin-left: 10px; font-weight: 600; color: var(--success);">✓ CORRETA</span>`;
@@ -285,7 +337,7 @@ function renderizarRevisao() {
         
         <div style="background: var(--bg-body); padding: 15px; border-radius: 8px; border-left: 3px solid var(--primary);">
             <span style="font-weight: 600; color: var(--primary); display: block; margin-bottom: 8px;">Explicação:</span>
-            <p style="color: var(--text-main); line-height: 1.6; margin: 0;">${escaparHTML(q.explicacao || 'Sem explicação disponível')}</p>
+            <div style="color: var(--text-main); line-height: 1.6; margin: 0;">${formatTextWithCode(q.explicacao || 'Sem explicação disponível')}</div>
         </div>
     `;
     
@@ -304,6 +356,29 @@ function renderizarRevisao() {
 
 function escaparHTML(str) {
     return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// Formata texto preservando quebras de linha e blocos de código demarcados por ``` ```
+function formatTextWithCode(text) {
+    if (!text) return '';
+    // Se marked + DOMPurify estiverem disponíveis, renderize Markdown com segurança
+    try {
+        if (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
+            const raw = marked.parse(String(text));
+            return DOMPurify.sanitize(raw);
+        }
+    } catch (e) {
+        console.warn('Markdown render failed, falling back:', e);
+    }
+
+    // Fallback simples: escapar HTML, converter blocos ``` ``` e quebras de linha
+    const escaped = escaparHTML(String(text));
+    const codeBlockRegex = /```([\s\S]*?)```/g;
+    let withCode = escaped.replace(codeBlockRegex, (m, code) => {
+        return `<pre class="code-block"><code>${code}</code></pre>`;
+    });
+    withCode = withCode.replace(/\r?\n/g, '<br>');
+    return withCode;
 }
 
 function adaptarURLGoogleDrive(url) {
@@ -334,7 +409,7 @@ function renderizarQuestao() {
     
     document.getElementById('q-badge').textContent = disciplina;
     document.getElementById('q-title').textContent = `Questão ${indiceQuestao + 1}`;
-    document.getElementById('q-text').textContent = titulo;
+    document.getElementById('q-text').innerHTML = formatTextWithCode(titulo);
 
     const imgArea = document.getElementById('q-image-area');
     const imgElement = document.getElementById('q-image');
@@ -359,14 +434,15 @@ function renderizarQuestao() {
 
     opcoes.forEach((texto, i) => {
         const letra = String.fromCharCode(65 + i);
-        const checked = respostas[indiceQuestao] === letra ? 'checked' : '';
+        const qid = q && q.id;
+        const checked = qid && respostas[qid] === letra ? 'checked' : '';
         
         container.innerHTML += `
             <div class="option-wrapper">
-                <input type="radio" name="opcao" id="opt-${i}" class="option-input" value="${letra}" ${checked} onchange="salvar('${letra}')">
+                <input type="radio" name="opcao" id="opt-${i}" class="option-input" value="${letra}" ${checked} onchange="salvar(${qid}, '${letra}')">
                 <label class="option-label" for="opt-${i}">
                     <div class="circle"></div>
-                    <strong>${letra})</strong>&nbsp; ${escaparHTML(texto)}
+                    <strong>${letra})</strong>&nbsp; ${formatTextWithCode(texto)}
                 </label>
             </div>
         `;
@@ -388,9 +464,14 @@ function renderizarQuestao() {
     atualizarSidebar();
 }
 
-function salvar(letra) {
-    respostas[indiceQuestao] = letra;
-    localStorage.setItem('respostas', JSON.stringify(respostas));
+function salvar(id, letra) {
+    if (typeof id === 'undefined' || id === null) return;
+    if (letra === null || typeof letra === 'undefined') {
+        delete respostas[id];
+    } else {
+        respostas[id] = letra;
+    }
+    try { localStorage.setItem('respostas', JSON.stringify(respostas)); } catch(e) {}
     atualizarSidebar();
 }
 
@@ -411,16 +492,21 @@ function atualizarSidebar() {
     document.querySelectorAll('.q-nav-btn').forEach((btn, i) => {
         btn.className = 'q-nav-btn';
         if(i === indiceQuestao) btn.classList.add('active');
-        if(respostas[i]) btn.classList.add('answered');
+        const qid = provaAtual[i] && provaAtual[i].id;
+        if(qid && respostas[qid]) btn.classList.add('answered');
         if(revisao.has(i)) btn.classList.add('review');
     });
 }
 
 function configurarTimer() {
     const display = document.getElementById('timer');
+    // Determine duration: prefer tempo_prova_minutos saved by server, else use PROVA_TEMPO_MIN
+    const savedTempo = parseInt(localStorage.getItem('tempo_prova_minutos'), 10);
+    const tempoMin = Number.isInteger(savedTempo) && savedTempo > 0 ? savedTempo : PROVA_TEMPO_MIN;
+
     let fim = localStorage.getItem('tempo_fim');
     if(!fim) {
-        fim = new Date().getTime() + TEMPO_PROVA_MIN * 60000;
+        fim = new Date().getTime() + tempoMin * 60000;
         localStorage.setItem('tempo_fim', fim);
     }
     timerInterval = setInterval(() => {
@@ -449,7 +535,7 @@ function setupAtalhos() {
 function configurarEventosProva() {
     document.getElementById('btn-next').onclick = () => { indiceQuestao++; renderizarQuestao(); };
     document.getElementById('btn-prev').onclick = () => { indiceQuestao--; renderizarQuestao(); };
-    document.getElementById('btn-clear').onclick = () => { delete respostas[indiceQuestao]; salvar(null); renderizarQuestao(); };
+    document.getElementById('btn-clear').onclick = () => { const qid = provaAtual[indiceQuestao] && provaAtual[indiceQuestao].id; if(qid) { delete respostas[qid]; salvar(qid, null); } renderizarQuestao(); };
     document.getElementById('btn-review').onclick = () => {
         if(revisao.has(indiceQuestao)) revisao.delete(indiceQuestao);
         else revisao.add(indiceQuestao);
@@ -495,7 +581,7 @@ function finalizar() {
     let token = localStorage.getItem('prova_token');
     
     provaAtual.forEach((q, indice) => {
-        const respostaAluno = respostas[indice];
+        const respostaAluno = respostas[q.id];
         
         // Apenas enviar se respondida
         if(respostaAluno) {
@@ -617,7 +703,7 @@ function exibirResultado() {
             ok = userResp === correta;
         } else {
             // Dados locais (fallback)
-            userResp = respostas[i];
+            userResp = respostas[q.id];
             correta = q.correta;
             ok = userResp === correta;
         }
@@ -688,4 +774,302 @@ function gerarCertificado() {
 function sair() {
     localStorage.clear();
     window.location.href = 'index.html';
+}
+
+// --- ADMIN: Cadastro de Questões (inicialização e handlers) ---
+function initAdminCreate() {
+    const form = document.getElementById('admin-create-form');
+    const btnSaveLocal = document.getElementById('btn-save-local');
+    const btnDownload = document.getElementById('btn-download-json');
+    const msg = document.getElementById('admin-msg');
+    const API_ADMIN = (typeof API_URL !== 'undefined' ? API_URL.replace(/\/$/, '') : 'http://localhost:3001') + '/questoes';
+
+    // Inicializar EasyMDE se disponível
+    try {
+        if (typeof EasyMDE !== 'undefined') {
+            easyMDEPergunta = new EasyMDE({
+                element: document.getElementById('q-pergunta'),
+                spellChecker: false,
+                autosave: { enabled: false },
+                placeholder: 'Digite a pergunta aqui... (aceita Markdown e blocos de código ``` ``` )',
+                toolbar: [
+                    'bold','italic','heading','|','quote','unordered-list','ordered-list','|','table',
+                    {
+                        name: 'fenced-code',
+                        action: function customFunction(editor){
+                            const cm = editor.codemirror;
+                            const doc = cm.getDoc();
+                            const pos = doc.getCursor();
+                            doc.replaceRange('\n```\n\n```\n', pos);
+                            cm.focus();
+                        },
+                        className: 'fa fa-code',
+                        title: 'Inserir bloco de código'
+                    },
+                    '|','preview','side-by-side','fullscreen'
+                ]
+            });
+
+            easyMDEExplicacao = new EasyMDE({
+                element: document.getElementById('q-explicacao'),
+                spellChecker: false,
+                autosave: { enabled: false },
+                placeholder: 'Explicação / Observações (Markdown)'
+            });
+        }
+    } catch (e) {
+        console.warn('EasyMDE não inicializado:', e);
+    }
+
+    // Buscar áreas do backend e popular select
+    fetch(`${API_URL}/form/areas`)
+        .then(r => r.json())
+        .then(data => {
+            const sel = document.getElementById('q-area');
+            sel.innerHTML = '<option value="">Selecione uma área</option>';
+            if (data.results && Array.isArray(data.results)) {
+                data.results.forEach(a => {
+                    const opt = document.createElement('option');
+                    opt.value = a.id;
+                    opt.textContent = a.area;
+                    sel.appendChild(opt);
+                });
+            }
+        })
+        .catch(err => {
+            console.error('Erro ao carregar áreas:', err);
+            const sel = document.getElementById('q-area');
+            sel.innerHTML = '<option value="">Erro ao carregar áreas</option>';
+        });
+
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        msg.textContent = '';
+        const payload = collectQuestionFromForm();
+
+        // Validação cliente para evitar erro de "invalid form control" quando textarea está oculto pelo editor
+        // Validação: pergunta, alternativas A-E, resposta certa, área e ano são obrigatórios
+        if (!payload.titulo || payload.titulo.trim().length === 0) {
+            msg.style.color = 'var(--danger)';
+            msg.textContent = 'Campo "Pergunta" é obrigatório.';
+            try { if (easyMDEPergunta && easyMDEPergunta.codemirror) easyMDEPergunta.codemirror.focus(); } catch(e) {}
+            try { if (!easyMDEPergunta) document.getElementById('q-pergunta').focus(); } catch(e) {}
+            return;
+        }
+
+        const requiredOptions = ['resposta_a','resposta_b','resposta_c','resposta_d','resposta_e'];
+        for (const opt of requiredOptions) {
+            if (!payload[opt] || payload[opt].trim().length === 0) {
+                msg.style.color = 'var(--danger)';
+                msg.textContent = `A opção ${opt.replace('resposta_','').toUpperCase()} é obrigatória.`;
+                return;
+            }
+        }
+
+        if (!payload.questao_certa || !['A','B','C','D','E'].includes(payload.questao_certa)) {
+            msg.style.color = 'var(--danger)';
+            msg.textContent = 'Selecione a resposta correta (A-E).';
+            return;
+        }
+
+        if (!payload.id_area) {
+            msg.style.color = 'var(--danger)';
+            msg.textContent = 'Selecione uma área.';
+            return;
+        }
+
+        if (!payload.ano_da_prova) {
+            msg.style.color = 'var(--danger)';
+            msg.textContent = 'Informe o ano da prova.';
+            return;
+        }
+
+        // Mostrar pré-visualização para confirmação antes de enviar
+        showAdminPreview(payload);
+    });
+
+    // Botões do modal de preview
+    document.getElementById('admin-preview-cancel').addEventListener('click', () => closeAdminPreview());
+    document.getElementById('admin-preview-confirm').addEventListener('click', () => {
+        const payload = window.__admin_preview_payload;
+        if (payload) sendAdminPayload(payload);
+    });
+
+    function showAdminPreview(payload) {
+        window.__admin_preview_payload = payload; // temporário
+        const body = document.getElementById('admin-preview-body');
+        body.innerHTML = '';
+
+        const titulo = document.createElement('div');
+        titulo.innerHTML = `<h4 style="margin-top:0;">${formatTextForPreview(payload.titulo)}</h4>`;
+        body.appendChild(titulo);
+
+        if (payload.url_anexo) {
+            const img = document.createElement('img');
+            img.src = payload.url_anexo;
+            img.style.maxWidth = '100%';
+            img.style.marginBottom = '8px';
+            body.appendChild(img);
+        }
+
+        const optionsList = document.createElement('div');
+        optionsList.innerHTML = `
+            <div style="margin:8px 0 6px 0; font-weight:600; color:var(--text-light);">Opções</div>
+        `;
+        const ul = document.createElement('div');
+        ul.style.display = 'flex';
+        ul.style.flexDirection = 'column';
+        ul.style.gap = '8px';
+
+        ['resposta_a','resposta_b','resposta_c','resposta_d','resposta_e'].forEach((k, i) => {
+            if (payload[k]) {
+                const letra = String.fromCharCode(65 + i);
+                const el = document.createElement('div');
+                el.style.padding = '10px';
+                el.style.border = '1px solid var(--border)';
+                el.style.borderRadius = '8px';
+                el.innerHTML = `<strong>${letra})</strong> ${formatTextForPreview(payload[k])}`;
+                if (letra === payload.questao_certa) {
+                    el.style.background = '#dcfce7';
+                    el.style.borderColor = 'var(--success)';
+                }
+                ul.appendChild(el);
+            }
+        });
+        optionsList.appendChild(ul);
+        body.appendChild(optionsList);
+
+        const meta = document.createElement('div');
+        meta.style.marginTop = '12px';
+        meta.innerHTML = `<div style="color:var(--text-light)">Área: ${payload.id_area || '-'}</div><div style="color:var(--text-light)">Ano: ${payload.ano_da_prova || '-'}</div>`;
+        body.appendChild(meta);
+
+        // explicacao (markdown) renderizada simples (preserva quebras)
+        if (payload.explicacao) {
+            const exp = document.createElement('div');
+            exp.style.marginTop = '12px';
+            exp.innerHTML = `<div style="font-weight:600;color:var(--text-light);margin-bottom:6px;">Explicação</div><div style="line-height:1.5;">${formatTextForPreview(payload.explicacao)}</div>`;
+            body.appendChild(exp);
+        }
+
+        document.getElementById('admin-preview-modal').style.display = 'flex';
+    }
+
+    function closeAdminPreview() {
+        document.getElementById('admin-preview-modal').style.display = 'none';
+        window.__admin_preview_payload = null;
+    }
+
+    function escapeHTMLForPreview(str) {
+        if(!str) return '';
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+    }
+
+    function formatTextForPreview(md) {
+        if (!md) return '';
+        try {
+            if (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
+                return DOMPurify.sanitize(marked.parse(String(md)));
+            }
+        } catch (e) { console.warn('Markdown preview failed', e); }
+
+        let escaped = md.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        escaped = escaped.replace(/```([\s\S]*?)```/g, function(m, code) {
+            return `<pre class="code-block"><code>${code}</code></pre>`;
+        });
+        return escaped.replace(/\r?\n/g, '<br>');
+    }
+
+    function sendAdminPayload(payload) {
+        const confirmBtn = document.getElementById('admin-preview-confirm');
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Enviando...';
+
+        fetch(API_ADMIN, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(async res => {
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = 'Confirmar e Salvar';
+            if (res.ok) {
+                const data = await res.json().catch(()=>null);
+                closeAdminPreview();
+                msg.style.color = 'var(--success)';
+                msg.textContent = 'Questão cadastrada com sucesso.';
+                form.reset();
+                if(easyMDEPergunta) easyMDEPergunta.value('');
+                if(easyMDEExplicacao) easyMDEExplicacao.value('');
+            } else {
+                const txt = await res.text().catch(()=>null);
+                msg.style.color = 'var(--danger)';
+                msg.textContent = `Falha ao salvar (status ${res.status}).`; 
+            }
+        })
+        .catch(err => {
+            console.error('Erro ao enviar questão:', err);
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = 'Confirmar e Salvar';
+            msg.style.color = 'var(--danger)';
+            msg.textContent = 'Erro ao enviar a questão. Verifique se a API está ativa.';
+            // manter preview aberto para o usuário decidir
+        });
+    }
+
+    btnSaveLocal.addEventListener('click', () => {
+        const payload = collectQuestionFromForm();
+        saveLocalDraft(payload);
+        msg.style.color = 'var(--success)';
+        msg.textContent = 'Questão salva localmente.';
+        form.reset();
+        if(easyMDEPergunta) easyMDEPergunta.value('');
+        if(easyMDEExplicacao) easyMDEExplicacao.value('');
+    });
+
+    btnDownload.addEventListener('click', () => {
+        const drafts = JSON.parse(localStorage.getItem('draft_questoes') || '[]');
+        if(drafts.length === 0) {
+            msg.style.color = 'var(--text-light)';
+            msg.textContent = 'Nenhuma questão local para baixar.';
+            return;
+        }
+        const blob = new Blob([JSON.stringify(drafts, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `questoes_draft_${new Date().toISOString().slice(0,10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        msg.style.color = 'var(--success)';
+        msg.textContent = 'Arquivo baixado.';
+    });
+}
+
+function collectQuestionFromForm() {
+    return {
+        titulo: (easyMDEPergunta && typeof easyMDEPergunta.value === 'function') ? easyMDEPergunta.value().trim() : document.getElementById('q-pergunta').value.trim(),
+        resposta_a: document.getElementById('q-a').value.trim(),
+        resposta_b: document.getElementById('q-b').value.trim(),
+        resposta_c: document.getElementById('q-c').value.trim() || null,
+        resposta_d: document.getElementById('q-d').value.trim() || null,
+        resposta_e: document.getElementById('q-e').value.trim() || null,
+        questao_certa: document.getElementById('q-correta').value,
+        id_area: document.getElementById('q-area').value ? Number(document.getElementById('q-area').value) : null,
+        ano_da_prova: document.getElementById('q-ano').value ? Number(document.getElementById('q-ano').value) : null,
+        url_anexo: document.getElementById('q-url').value.trim() || null,
+        explicacao: (easyMDEExplicacao && typeof easyMDEExplicacao.value === 'function') ? easyMDEExplicacao.value().trim() : document.getElementById('q-explicacao').value.trim() || null
+    };
+}
+
+function saveLocalDraft(payload) {
+    try {
+        const existing = JSON.parse(localStorage.getItem('draft_questoes') || '[]');
+        existing.push(Object.assign({ created_at: new Date().toISOString() }, payload));
+        localStorage.setItem('draft_questoes', JSON.stringify(existing));
+    } catch (e) {
+        console.error('Erro ao salvar draft local:', e);
+    }
 }

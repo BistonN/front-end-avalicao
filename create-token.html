@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Criar Token - Avaliação SENAI</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .create-token-container { max-width: 560px; margin: 40px auto; }
+    .q-list { list-style:none; padding-left:0; margin-top:12px }
+    .q-list li { display:flex; justify-content:space-between; align-items:center; padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:var(--bg-body); margin-bottom:8px }
+    .small { font-size:0.9rem; color:var(--text-light) }
+  </style>
+</head>
+<body class="login-body unselectable">
+  <div class="login-container create-token-container fade-in">
+    <div class="login-header">
+      <img src="logo.png" alt="Logo SENAI" class="senai-logo-login">
+      <h1>Criar Token de Prova</h1>
+      <p class="small">Selecione questões por área e clique em criar token.</p>
+    </div>
+    <div style="margin-top:12px;">
+      <div style="margin-bottom:8px; display:flex; gap:8px; align-items:center;">
+        <label style="width:80px;">Filtrar área:</label>
+        <select id="areaFilter" style="flex:1; padding:8px; border-radius:8px; border:1px solid var(--border)">
+          <option value="">Todas as áreas</option>
+        </select>
+        <button id="clearSelection" class="btn btn-ghost" style="margin-left:8px;">Limpar seleção</button>
+      </div>
+
+      <div id="questionsByArea" style="max-height:320px; overflow:auto; border:1px solid var(--border); padding:10px; border-radius:8px; background:var(--bg-body)"></div>
+      <ul id="qList" class="q-list" style="margin-top:10px"></ul>
+    </div>
+
+    <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+      <label style="white-space:nowrap;">Tempo (min):</label>
+      <input id="tempoInput" type="number" min="1" value="170" style="width:120px; padding:8px; border-radius:8px; border:1px solid var(--border)" />
+      <div style="flex:1"></div>
+      <button id="createBtn" class="btn btn-primary btn-full">Criar token</button>
+    </div>
+
+    <div id="result" style="margin-top:12px"></div>
+  </div>
+
+  <script>
+  const API_URL = localStorage.getItem('api_url') || 'http://localhost:3000';
+    const areaFilter = document.getElementById('areaFilter');
+    const questionsByArea = document.getElementById('questionsByArea');
+    const clearSelection = document.getElementById('clearSelection');
+    const createBtn = document.getElementById('createBtn');
+    const resultEl = document.getElementById('result');
+    const selected = new Set();
+
+    // render list of selected ids in the small list area (for copy/visual)
+    function renderSelectedList() {
+      const qListEl = document.getElementById('qList');
+      qListEl.innerHTML = '';
+      Array.from(selected).forEach((id, idx) => {
+        const li = document.createElement('li');
+        li.innerHTML = `<span>${id}</span>`;
+        const btn = document.createElement('button');
+        btn.type = 'button'; btn.className = 'btn btn-ghost'; btn.textContent = 'Remover';
+        btn.onclick = () => { selected.delete(id); renderSelectedList(); updateCheckboxState(); };
+        li.appendChild(btn);
+        qListEl.appendChild(li);
+      });
+    }
+
+    // Fetch all questions grouped by area and render checkboxes
+    async function loadQuestions() {
+      try {
+        const resp = await fetch(`${API_URL}/form/questions`);
+        const data = await resp.json();
+        if (!resp.ok) { resultEl.textContent = 'Erro ao carregar questões'; return; }
+        const rows = data.results || [];
+
+        // group by area
+        const groups = {};
+        rows.forEach(r => {
+          const area = r.area || 'Sem Área';
+          if (!groups[area]) groups[area] = [];
+          groups[area].push(r);
+        });
+
+        // populate areaFilter
+        areaFilter.innerHTML = '<option value="">Todas as áreas</option>';
+        Object.keys(groups).forEach(a => {
+          const opt = document.createElement('option'); opt.value = a; opt.textContent = a; areaFilter.appendChild(opt);
+        });
+
+        renderGroups(groups);
+      } catch (err) {
+        console.error('Erro ao carregar questões:', err);
+        resultEl.textContent = 'Erro ao carregar questões';
+      }
+    }
+
+    function renderGroups(groups) {
+      questionsByArea.innerHTML = '';
+      Object.keys(groups).forEach(area => {
+        const section = document.createElement('div');
+        section.style.marginBottom = '12px';
+        section.dataset.area = area;
+
+        const hdr = document.createElement('div');
+        hdr.style.fontWeight = '700';
+        hdr.style.cursor = 'pointer';
+        hdr.style.display = 'flex';
+        hdr.style.justifyContent = 'space-between';
+        hdr.style.alignItems = 'center';
+        hdr.innerHTML = `<span>${area}</span><span style="font-weight:600; color:var(--text-light)">${groups[area].length}</span>`;
+        section.appendChild(hdr);
+
+        const list = document.createElement('div');
+        list.style.display = 'none';
+        list.style.marginTop = '8px';
+        list.style.display = 'grid'; list.style.gridTemplateColumns = '1fr'; list.style.gap = '6px';
+
+        groups[area].forEach(q => {
+          const row = document.createElement('div'); row.style.display = 'flex'; row.style.alignItems = 'center'; row.style.gap = '8px';
+          const chk = document.createElement('input'); chk.type = 'checkbox'; chk.value = q.id; chk.dataset.qid = q.id;
+          chk.onchange = (e) => { if(e.target.checked) selected.add(Number(e.target.value)); else selected.delete(Number(e.target.value)); renderSelectedList(); };
+          const label = document.createElement('label'); label.style.flex = '1'; label.innerHTML = `<strong>#${q.id}</strong> — ${q.titulo && q.titulo.length>150 ? q.titulo.substring(0,150)+'...' : q.titulo}`;
+          row.appendChild(chk);
+          row.appendChild(label);
+          list.appendChild(row);
+        });
+
+        hdr.addEventListener('click', () => {
+          // accordion behavior: close others
+          document.querySelectorAll('#questionsByArea > div').forEach(s => {
+            const l = s.querySelector('div');
+            if (s === section) {
+              l.style.display = (l.style.display === 'none' || !l.style.display) ? '' : 'none';
+            } else {
+              if (l) l.style.display = 'none';
+            }
+          });
+          // update checkbox state when opening
+          updateCheckboxState();
+        });
+
+        section.appendChild(list);
+        questionsByArea.appendChild(section);
+      });
+    }
+
+    areaFilter.addEventListener('change', () => {
+      const val = areaFilter.value;
+      Array.from(questionsByArea.children).forEach(section => {
+        const areaName = section.dataset.area || '';
+        if (!val) section.style.display = '';
+        else section.style.display = areaName === val ? '' : 'none';
+      });
+    });
+
+    clearSelection.addEventListener('click', () => { selected.clear(); renderSelectedList(); updateCheckboxState(); });
+
+    function updateCheckboxState() {
+      document.querySelectorAll('#questionsByArea input[type=checkbox]').forEach(cb => { cb.checked = selected.has(Number(cb.value)); });
+    }
+
+    // initially load
+    loadQuestions();
+
+    createBtn.addEventListener('click', async () => {
+      // use selected set; if empty fall back to manual questions list
+      const selectedIds = Array.from(selected);
+      if (selectedIds.length === 0) return alert('Selecione pelo menos uma questão');
+      const tempo = parseInt(document.getElementById('tempoInput').value || '170', 10) || 170;
+      resultEl.textContent = 'Enviando...';
+      try {
+        const resp = await fetch(`${API_URL}/form`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ questions: selectedIds, tempo_minutos: tempo })
+        });
+        const data = await resp.json();
+        if (!resp.ok) { resultEl.innerHTML = '<strong>Erro:</strong> ' + (data.message || JSON.stringify(data)); return; }
+        resultEl.innerHTML = `<strong>Token:</strong> ${data.subToken} <br><strong>Qtd questões:</strong> ${data.questionsCount} <br><strong>Tempo (min):</strong> ${tempo}`;
+        selected.clear(); renderSelectedList(); updateCheckboxState();
+      } catch (err) { resultEl.innerHTML = '<strong>Erro:</strong> ' + err.message; }
+    });
+  </script>
+  <script>
+    // Aplicar tema salvo
+    try {
+      if (localStorage.getItem('theme') === 'dark') document.body.classList.add('dark-mode');
+    } catch (e) {}
+  </script>
+</body>
+</html>

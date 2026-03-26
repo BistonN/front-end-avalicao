@@ -15,7 +15,8 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
 
-body { background-color: var(--bg-body); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+/* Permitir scroll nas páginas longas usando min-height e overflow auto */
+body { background-color: var(--bg-body); color: var(--text-main); min-height: 100vh; display: flex; flex-direction: column; overflow: auto; }
 
 /* --- 2. UTILITÁRIOS --- */
 .unselectable { user-select: none; }
@@ -260,3 +261,28 @@ body.dark-mode .option-input:checked + .option-label, body.dark-mode .exam-card.
     overflow-y: auto;
     padding-right: 10px;
 }
+
+/* --- FORMULÁRIO DE CADASTRO (Admin) --- */
+.simple-page { background: var(--bg-body); min-height: 100vh; padding: 30px 16px; }
+.simple-page .card { max-width: 1000px; padding: 1.6rem; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-grid .input-group { margin-bottom: 0; }
+.form-grid .input-group textarea, .form-grid .input-group input, .form-grid .input-group select {
+    width: 100%; padding: 12px; border: 2px solid var(--border); border-radius: 8px; background: var(--bg-body); color: var(--text-main); font-size: 1rem; outline: none; box-sizing: border-box;
+}
+.form-grid .input-group textarea { min-height: 160px; resize: vertical; }
+.options-block .input-group { margin-bottom: 10px; }
+.options-block .input-group label { font-size: 0.95rem; }
+.form-grid .input-group[style*="grid-column:1 / -1;"] { grid-column: 1 / -1; }
+
+.card-footer.admin-actions { display: flex; gap: 10px; align-items: center; justify-content: flex-start; padding-top: 16px; border-top: 1px solid var(--border); margin-top: 18px; }
+.card-footer.admin-actions .btn { padding: 10px 18px; }
+
+@media (max-width: 800px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .card { padding: 1rem; margin: 12px; }
+}
+
+/* Código formatado (exibição de blocos de código) */
+.code-block { background: #0f172a; color: #e6edf3; padding: 12px; border-radius: 8px; overflow: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, 'Roboto Mono', 'Courier New', monospace; font-size: 0.9rem; line-height: 1.45; margin: 8px 0; }
+.code-block code { white-space: pre; display: block; }
